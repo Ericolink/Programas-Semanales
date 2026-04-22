@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Member {
+  id        Int     @id @default(autoincrement())
+  name      String
+  gender    String  // "H" o "M"
+  role      String  // Anciano, Ministerial, etc.
+
+  groupId   Int?
+  group     Group?  @relation(fields: [groupId], references: [id])
+
+  assignments AssignmentDone[]
+
+  createdAt DateTime @default(now())
+}
+
+model Group {
+  id      Int      @id @default(autoincrement())
+  name    String
+
+  members Member[]
+}
+
+model Week {
+  id          Int          @id @default(autoincrement())
+  startDate   DateTime
+
+  assignments Assignment[]
+  done        AssignmentDone[]
+}
+
+model Assignment {
+  id        Int      @id @default(autoincrement())
+  name      String
+  type      String   // "H", "M", "AMBOS"
+
+  weekId    Int
+  week      Week     @relation(fields: [weekId], references: [id])
+
+  done      AssignmentDone[]
+}
+
+model AssignmentDone {
+  id            Int  @id @default(autoincrement())
+
+  memberId      Int
+  assignmentId  Int
+  weekId        Int
+
+  member        Member     @relation(fields: [memberId], references: [id])
+  assignment    Assignment @relation(fields: [assignmentId], references: [id])
+  week          Week       @relation(fields: [weekId], references: [id])
+}
