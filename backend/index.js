@@ -3,6 +3,7 @@ const cors = require("cors");
 
 const app = express();
 const prisma = require("./prismaClient");
+const memberRoutes = require("./routes/memberRoutes");
 
 app.use(cors());
 app.use(express.json());
@@ -10,6 +11,9 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("API funcionando 🚀");
 });
+
+
+app.use("/members", memberRoutes);
 
 
 app.get("/members", async (req, res) => {
