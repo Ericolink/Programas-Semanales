@@ -7,54 +7,57 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Member {
-  id        Int     @id @default(autoincrement())
-  name      String
-  gender    String  // "H" o "M"
-  role      String  // Anciano, Ministerial, etc.
-
-  groupId   Int?
-  group     Group?  @relation(fields: [groupId], references: [id])
-
-  assignments AssignmentDone[]
-
-  createdAt DateTime @default(now())
+model Role {
+  id       Int      @id @default(autoincrement())
+  name     String   @unique  // "Anciano", "Ministerial", "Publicador", "Pionero"
+  canLead  Boolean  @default(false)
+  members  Member[]
 }
 
 model Group {
   id      Int      @id @default(autoincrement())
   name    String
-
   members Member[]
 }
 
-model Week {
-  id          Int          @id @default(autoincrement())
-  startDate   DateTime
-
-  assignments Assignment[]
-  done        AssignmentDone[]
+model Member {
+  id          Int              @id @default(autoincrement())
+  name        String
+  gender      String
+  active      Boolean          @default(true)
+  groupId     Int?
+  group       Group?           @relation(fields: [groupId], references: [id])
+  roleId      Int?
+  role        Role?            @relation(fields: [roleId], references: [id])
+  assignments AssignmentDone[]
+  createdAt   DateTime         @default(now())
 }
 
-model Assignment {
-  id        Int      @id @default(autoincrement())
-  name      String
-  type      String   // "H", "M", "AMBOS"
+model AssignmentType {
+  id             Int              @id @default(autoincrement())
+  name           String           @unique  // "Oración inicial", "Discurso", etc.
+  gender         String           // "H", "M", "AMBOS"
+  section        String           // "Vida Cristiana", "Ministerio Cristiano", etc.
+  order          Int              // Para exportar en orden correcto
+  requiresHelper Boolean          @default(false)  // Si necesita ayudante
+  assignments    AssignmentDone[]
+}
 
-  weekId    Int
-  week      Week     @relation(fields: [weekId], references: [id])
-
-  done      AssignmentDone[]
+model Week {
+  id          Int              @id @default(autoincrement())
+  startDate   DateTime         @unique
+  assignments AssignmentDone[]
 }
 
 model AssignmentDone {
-  id            Int  @id @default(autoincrement())
+  id               Int            @id @default(autoincrement())
+  memberId         Int
+  assignmentTypeId Int
+  weekId           Int
+  isHelper         Boolean        @default(false)  // false = principal, true = ayudante
+  member           Member         @relation(fields: [memberId], references: [id])
+  assignmentType   AssignmentType @relation(fields: [assignmentTypeId], references: [id])
+  week             Week           @relation(fields: [weekId], references: [id])
 
-  memberId      Int
-  assignmentId  Int
-  weekId        Int
-
-  member        Member     @relation(fields: [memberId], references: [id])
-  assignment    Assignment @relation(fields: [assignmentId], references: [id])
-  week          Week       @relation(fields: [weekId], references: [id])
+  @@unique([memberId, assignmentTypeId, weekId, isHelper])
 }

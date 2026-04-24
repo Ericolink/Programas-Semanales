@@ -1,96 +1,95 @@
-const prisma = require("../prismaClient");
+import { prisma } from '../prismaClient.js';
 
-// Crear miembro
-const createMember = async (req, res) => {
+const INCLUDE = {
+  group: true,
+  role: true,
+};
+
+export async function createMember(req, res) {
   try {
-    const { name, gender, role, groupId } = req.body;
+    const { name, gender, roleId, groupId, active } = req.body;
 
-    const newMember = await prisma.member.create({
+    if (!name || !gender)
+      return res.status(400).json({ error: 'name y gender son requeridos' });
+
+    if (!['H', 'M'].includes(gender))
+      return res.status(400).json({ error: 'gender debe ser H o M' });
+
+    const member = await prisma.member.create({
       data: {
         name,
         gender,
-        role,
-        groupId: groupId || null,
+        roleId: roleId ?? null,
+        groupId: groupId ?? null,
+        active: active ?? true,
       },
+      include: INCLUDE,
     });
-
-    res.json(newMember);
-  } catch (error) {
-    res.status(500).json({ error: "Error al crear miembro" });
+    res.status(201).json(member);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-};
+}
 
-// Obtener todos
-const getMembers = async (req, res) => {
+export async function getMembers(req, res) {
   try {
     const members = await prisma.member.findMany({
-      include: {
-        group: true,
-      },
+      include: INCLUDE,
+      orderBy: { name: 'asc' },
     });
-
     res.json(members);
-  } catch (error) {
-    res.status(500).json({ error: "Error al obtener miembros" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-};
+}
 
-// Obtener uno
-const getMemberById = async (req, res) => {
+export async function getMemberById(req, res) {
   try {
-    const { id } = req.params;
-
     const member = await prisma.member.findUnique({
-      where: { id: Number(id) },
+      where: { id: Number(req.params.id) },
+      include: INCLUDE,
     });
-
+    if (!member) return res.status(404).json({ error: 'Miembro no encontrado' });
     res.json(member);
-  } catch (error) {
-    res.status(500).json({ error: "Error al obtener miembro" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-};
+}
 
-// Actualizar
-const updateMember = async (req, res) => {
+export async function updateMember(req, res) {
   try {
-    const { id } = req.params;
-    const { name, gender, role, groupId } = req.body;
+    const { name, gender, roleId, groupId, active } = req.body;
 
-    const updated = await prisma.member.update({
-      where: { id: Number(id) },
+    if (gender && !['H', 'M'].includes(gender))
+      return res.status(400).json({ error: 'gender debe ser H o M' });
+
+    const member = await prisma.member.update({
+      where: { id: Number(req.params.id) },
       data: {
-        name,
-        gender,
-        role,
-        groupId,
+        ...(name !== undefined && { name }),
+        ...(gender !== undefined && { gender }),
+        ...(roleId !== undefined && { roleId }),
+        ...(groupId !== undefined && { groupId }),
+        ...(active !== undefined && { active }),
       },
+      include: INCLUDE,
     });
-
-    res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Error al actualizar miembro" });
+    res.json(member);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Miembro no encontrado' });
+    res.status(500).json({ error: err.message });
   }
-};
+}
 
-// Eliminar
-const deleteMember = async (req, res) => {
+export async function deleteMember(req, res) {
   try {
-    const { id } = req.params;
-
     await prisma.member.delete({
-      where: { id: Number(id) },
+      where: { id: Number(req.params.id) },
     });
-
-    res.json({ message: "Miembro eliminado" });
-  } catch (error) {
-    res.status(500).json({ error: "Error al eliminar miembro" });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Miembro no encontrado' });
+    if (err.code === 'P2003') return res.status(409).json({ error: 'No se puede eliminar, tiene asignaciones registradas' });
+    res.status(500).json({ error: err.message });
   }
-};
-
-module.exports = {
-  createMember,
-  getMembers,
-  getMemberById,
-  updateMember,
-  deleteMember,
-};
+}
