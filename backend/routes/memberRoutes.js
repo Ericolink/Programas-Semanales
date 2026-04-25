@@ -1,8 +1,18 @@
 import express from 'express';
-import { importWeek } from '../controllers/weekController.js';
+import {
+  createMember,
+  getMembers,
+  getMemberById,
+  updateMember,
+  deleteMember,
+} from '../controllers/memberController.js';
 
 const router = express.Router();
 
-router.post('/import', importWeek);
+router.get('/', getMembers);
+router.get('/:id', getMemberById);
+router.post('/', createMember);
+router.put('/:id', updateMember);
+router.delete('/:id', deleteMember);
 
 export default router;
