@@ -22,26 +22,14 @@ function parseWeekHTML(html, docId) {
   const $ = cheerio.load(html);
   const partes = [];
   let order = 0;
+  let partNumber = 0; // contador global de puntos del programa
 
-  // Fecha — está en el h1
-  const titulo = $('h1').first().text().trim(); // "20-26 DE ABRIL"
+  const titulo = $('h1').first().text().trim();
   const startDate = parseDateFromTitle(titulo);
 
-  // Canción apertura y oración — está en el primer h3
-  partes.push({
-    name: 'Canción y oración de apertura',
-    section: 'Apertura',
-    gender: 'H',
-    order: order++,
-    requiresHelper: false,
-  });
-  partes.push({
-    name: 'Palabras de introducción',
-    section: 'Apertura',
-    gender: 'H',
-    order: order++,
-    requiresHelper: false,
-  });
+  // Apertura — siempre fijas, sin número
+  partes.push({ name: 'Canción y oración de apertura', customName: null, section: 'Apertura', gender: 'H', order: order++, requiresHelper: false });
+  partes.push({ name: 'Palabras de introducción',      customName: null, section: 'Apertura', gender: 'H', order: order++, requiresHelper: false });
 
   let currentSection = '';
 
@@ -49,82 +37,95 @@ function parseWeekHTML(html, docId) {
     const tag = el.tagName;
     const text = $(el).text().trim();
 
-    // Detectar sección principal
     if (tag === 'h2') {
-      if (/tesoros de la biblia/i.test(text))       currentSection = 'Tesoros de la Biblia';
+      if (/tesoros de la biblia/i.test(text))        currentSection = 'Tesoros de la Biblia';
       else if (/seamos mejores maestros/i.test(text)) currentSection = 'Seamos Mejores Maestros';
       else if (/nuestra vida cristiana/i.test(text))  currentSection = 'Nuestra Vida Cristiana';
       return;
     }
 
-    // h3 = partes individuales
     if (tag === 'h3') {
-      // Ignorar canciones y palabras de apertura/conclusión (ya las agregamos fijas)
       if (/^canción/i.test(text) || /palabras de introducción/i.test(text)) return;
 
-      // Palabras de conclusión — parte fija de cierre
       if (/palabras de conclusión/i.test(text)) {
-        partes.push({ name: 'Palabras de conclusión', section: 'Cierre', gender: 'H', order: 99, requiresHelper: false });
-        partes.push({ name: 'Oración de cierre', section: 'Cierre', gender: 'H', order: 100, requiresHelper: false });
+        partes.push({ name: 'Palabras de conclusión', customName: null, section: 'Cierre', gender: 'H', order: 99, requiresHelper: false });
+        partes.push({ name: 'Oración de cierre',      customName: null, section: 'Cierre', gender: 'H', order: 100, requiresHelper: false });
         return;
       }
 
-      // Estudio bíblico
       if (/estudio bíblico de la congregación/i.test(text)) {
-        partes.push({ name: 'Estudio bíblico de la congregación', section: 'Nuestra Vida Cristiana', gender: 'H', order: 98, requiresHelper: false });
+        partes.push({ name: 'Estudio bíblico de la congregación', customName: null, section: 'Nuestra Vida Cristiana', gender: 'H', order: 98, requiresHelper: false });
         return;
       }
 
-      // Quitar número inicial: "4. Empiece conversaciones" → "Empiece conversaciones"
       const cleanName = text.replace(/^\d+\.\s*/, '').trim();
+      partNumber++;
 
       if (currentSection === 'Tesoros de la Biblia') {
         const isBibleReading = /lectura de la biblia/i.test(cleanName);
+        const isPerlas       = /busquemos perlas escondidas/i.test(cleanName);
+        const isFirstDiscurso = !isBibleReading && !isPerlas;
+
         partes.push({
-          name: cleanName,
-          section: currentSection,
-          gender: isBibleReading ? 'AMBOS' : 'H',
-          order: order++,
+          name:       isFirstDiscurso ? `Discurso de Tesoros de la Biblia` : cleanName,
+          customName: isFirstDiscurso ? cleanName : null,
+          section:    currentSection,
+          gender:     isBibleReading ? 'AMBOS' : 'H',
+          order:      order++,
           requiresHelper: false,
         });
       }
 
       if (currentSection === 'Seamos Mejores Maestros') {
         const key = Object.keys(SMM_TYPES).find(k => cleanName.toLowerCase().startsWith(k));
-        const meta = SMM_TYPES[key] ?? { name: cleanName, requiresHelper: false };
+        const meta = SMM_TYPES[key] ?? { requiresHelper: false };
+
+        // Nombre único usando el número de punto: "Empiece conversaciones 4"
         partes.push({
-          name: meta.name,
-          section: currentSection,
-          gender: 'AMBOS',
-          order: order++,
+          name:           `${cleanName} ${partNumber}`,
+          customName:     null,
+          section:        currentSection,
+          gender:         'AMBOS',
+          order:          order++,
           requiresHelper: meta.requiresHelper,
         });
       }
 
       if (currentSection === 'Nuestra Vida Cristiana') {
+        // Nombre único usando el número de punto: "Parte de Nuestra Vida Cristiana 7"
         partes.push({
-          name: cleanName,
-          section: currentSection,
-          gender: 'H',
-          order: order++,
+          name:       `Parte de Nuestra Vida Cristiana ${partNumber}`,
+          customName: cleanName,
+          section:    currentSection,
+          gender:     'H',
+          order:      order++,
           requiresHelper: false,
         });
       }
     }
   });
 
-  return { startDate, docId, partes: partes.sort((a, b) => a.order - b.order) };
+  return { startDate, docId, partes };
 }
 
 function parseDateFromTitle(titulo) {
-  // "20-26 DE ABRIL" → Date
   const months = {
     ENERO: 0, FEBRERO: 1, MARZO: 2, ABRIL: 3, MAYO: 4, JUNIO: 5,
     JULIO: 6, AGOSTO: 7, SEPTIEMBRE: 8, OCTUBRE: 9, NOVIEMBRE: 10, DICIEMBRE: 11,
   };
-  const match = titulo.match(/(\d{1,2})[-–]\d{1,2}\s+DE\s+([A-ZÁÉÍÓÚ]+)/i);
+
+  // Limpia caracteres invisibles y normaliza
+  const clean = titulo.replace(/[\u00A0\u200B\s]+/g, ' ').trim();
+  console.log('Título recibido:', JSON.stringify(clean));
+
+  const match = clean.match(/(\d{1,2})\s*[-–]\s*\d{1,2}\s+DE\s+([A-ZÁÉÍÓÚ]+)/i);
+  console.log('Match:', match);
+
   if (!match) return null;
+
   const day = parseInt(match[1]);
   const month = months[match[2].toUpperCase()];
+  if (month === undefined) return null;
+
   return new Date(2026, month, day);
 }

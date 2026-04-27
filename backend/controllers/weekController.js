@@ -1,6 +1,6 @@
 import { scrapeWeek } from '../services/weekScraper.js';
-import { prisma } from '../prismaClient.js';
 import { generateAssignments } from '../services/assignmentGenerator.js';
+import { prisma } from '../prismaClient.js';
 
 export async function importWeek(req, res) {
   try {
@@ -9,6 +9,12 @@ export async function importWeek(req, res) {
 
     const { startDate, partes } = await scrapeWeek(docId);
 
+    if (!startDate) {
+      return res.status(400).json({
+        error: 'No se pudo detectar la fecha. Verifica el docId.'
+      });
+    }
+
     const week = await prisma.week.upsert({
       where: { startDate },
       update: {},
@@ -16,7 +22,7 @@ export async function importWeek(req, res) {
     });
 
     for (const parte of partes) {
-      await prisma.assignmentType.upsert({
+      const baseType = await prisma.assignmentType.upsert({
         where: { name: parte.name },
         update: {},
         create: {
@@ -25,6 +31,21 @@ export async function importWeek(req, res) {
           gender: parte.gender,
           order: parte.order,
           requiresHelper: parte.requiresHelper,
+        },
+      });
+
+      await prisma.weekAssignmentType.upsert({
+        where: {
+          weekId_assignmentTypeId: {
+            weekId: week.id,
+            assignmentTypeId: baseType.id,
+          }
+        },
+        update: { customName: parte.customName ?? null },
+        create: {
+          weekId: week.id,
+          assignmentTypeId: baseType.id,
+          customName: parte.customName ?? null,
         },
       });
     }
@@ -55,11 +76,12 @@ export async function getWeekById(req, res) {
     const week = await prisma.week.findUnique({
       where: { id: Number(req.params.id) },
       include: {
+        weekTypes: {
+          include: { assignmentType: true },
+          orderBy: { assignmentType: { order: 'asc' } },
+        },
         assignments: {
-          include: {
-            member: true,
-            assignmentType: true,
-          },
+          include: { member: true, assignmentType: true },
           orderBy: { assignmentType: { order: 'asc' } },
         },
       },
@@ -82,44 +104,16 @@ export async function updateAssignment(req, res) {
     const assignment = await prisma.assignmentDone.upsert({
       where: {
         memberId_assignmentTypeId_weekId_isHelper: {
-          memberId,
-          assignmentTypeId,
-          weekId,
-          isHelper: isHelper ?? false,
+          memberId, assignmentTypeId, weekId, isHelper: isHelper ?? false,
         },
       },
       update: { memberId },
-      create: {
-        memberId,
-        assignmentTypeId,
-        weekId,
-        isHelper: isHelper ?? false,
-      },
-      include: {
-        member: true,
-        assignmentType: true,
-      },
+      create: { memberId, assignmentTypeId, weekId, isHelper: isHelper ?? false },
+      include: { member: true, assignmentType: true },
     });
 
     res.json(assignment);
   } catch (err) {
-    if (err.code === 'P2025') return res.status(404).json({ error: 'Semana no encontrada' });
-    res.status(500).json({ error: err.message });
-  }
-}
-
-export async function deleteWeek(req, res) {
-  try {
-    // Eliminar asignaciones primero
-    await prisma.assignmentDone.deleteMany({
-      where: { weekId: Number(req.params.id) },
-    });
-    await prisma.week.delete({
-      where: { id: Number(req.params.id) },
-    });
-    res.json({ ok: true });
-  } catch (err) {
-    if (err.code === 'P2025') return res.status(404).json({ error: 'Semana no encontrada' });
     res.status(500).json({ error: err.message });
   }
 }
@@ -131,6 +125,18 @@ export async function generateWeekAssignments(req, res) {
     res.json({ ok: true, data: result });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function deleteWeek(req, res) {
+  try {
+    await prisma.assignmentDone.deleteMany({ where: { weekId: Number(req.params.id) } });
+    await prisma.weekAssignmentType.deleteMany({ where: { weekId: Number(req.params.id) } });
+    await prisma.week.delete({ where: { id: Number(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Semana no encontrada' });
     res.status(500).json({ error: err.message });
   }
 }

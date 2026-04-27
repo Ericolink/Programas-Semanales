@@ -1,36 +1,13 @@
 import { prisma } from '../prismaClient.js';
 
 const WEEKS_LOOKBACK = 4;
-const PRIVILEGED_ROLES = ['Anciano', 'Ministerial'];
 
-// Partes del presidente — misma persona en toda la reunión
-const PRESIDENT_PART_NAMES = [
-  'Canción y oración de apertura',
-  'Palabras de introducción',
-  'Palabras de conclusión',
-  'Oración de cierre',
-];
-
-// Secciones y partes que requieren rol privilegiado
-const PRIVILEGED_SECTIONS = ['Apertura', 'Cierre'];
-const PRIVILEGED_PART_NAMES = [
-  'Busquemos perlas escondidas',
-  'Estudio bíblico de la congregación',
-];
-
-// El primer discurso de Tesoros de la Biblia siempre es privilegiado
-// Lo detectamos por sección + order <= 2
-function isPrivilegedType(type) {
-  if (PRIVILEGED_SECTIONS.includes(type.section)) return true;
-  if (PRIVILEGED_PART_NAMES.includes(type.name)) return true;
-  // Primer discurso de Tesoros (order 2) — título cambia cada semana
-  if (type.section === 'Tesoros de la Biblia' && type.order === 2) return true;
-  return false;
-}
-
-function isPresidentPart(type) {
-  return PRESIDENT_PART_NAMES.includes(type.name);
-}
+const isAnciano     = m => m.role?.name === 'Anciano';
+const isMinisterial = m => m.role?.name === 'Ministerial';
+const isPublicador  = m => m.role?.name === 'Publicador';
+const isPrivileged  = m => isAnciano(m) || isMinisterial(m);
+const isH           = m => m.gender === 'H';
+const isM           = m => m.gender === 'M';
 
 export async function generateAssignments(weekId) {
   const week = await prisma.week.findUnique({ where: { id: weekId } });
@@ -39,6 +16,18 @@ export async function generateAssignments(weekId) {
   const assignmentTypes = await prisma.assignmentType.findMany({
     orderBy: { order: 'asc' },
   });
+
+  // Obtener customNames de esta semana
+  const weekTypes = await prisma.weekAssignmentType.findMany({
+    where: { weekId },
+  });
+  const customNameMap = new Map(
+    weekTypes.map(wt => [wt.assignmentTypeId, wt.customName])
+  );
+
+  // Solo usar los tipos que pertenecen a esta semana
+  const weekTypeIds = new Set(weekTypes.map(wt => wt.assignmentTypeId));
+  const weekAssignmentTypes = assignmentTypes.filter(t => weekTypeIds.has(t.id));
 
   const members = await prisma.member.findMany({
     where: { active: true },
@@ -66,102 +55,159 @@ export async function generateAssignments(weekId) {
   await prisma.assignmentDone.deleteMany({ where: { weekId } });
 
   const assignments = [];
-  const usedMemberIds = new Set();
-  let presidentId = null;
+  const used = new Set();
 
-  for (const type of assignmentTypes) {
-    const privileged = isPrivilegedType(type);
-    const presidentPart = isPresidentPart(type);
-
-    // --- Partes del presidente ---
-    if (presidentPart) {
-      if (!presidentId) {
-        const candidates = members.filter(m =>
-          m.gender === 'H' && m.role && PRIVILEGED_ROLES.includes(m.role.name)
-        );
-        const selected = selectMember(candidates, type.id, recentMap, new Set());
-        if (selected) presidentId = selected.id;
-      }
-      if (presidentId) {
-        assignments.push({ memberId: presidentId, assignmentTypeId: type.id, weekId, isHelper: false });
-      }
-      continue;
-    }
-
-    // --- Filtrar por género ---
-    let candidates = members.filter(m => {
-      if (type.gender === 'H') return m.gender === 'H';
-      if (type.gender === 'M') return m.gender === 'M';
-      return true;
+  function pick(candidates, typeId, extraExclude = new Set(), ignoreRecent = false) {
+    const excluded = new Set([...used, ...extraExclude]);
+    const available = candidates.filter(m => {
+      if (excluded.has(m.id)) return false;
+      if (ignoreRecent) return true;
+      const recent = recentMap.get(m.id);
+      return !recent || !recent.has(typeId);
     });
 
-    // --- Filtrar por rol si es privilegiada ---
-    if (privileged) {
-      candidates = candidates.filter(m =>
-        m.role && PRIVILEGED_ROLES.includes(m.role.name)
-      );
+    if (available.length === 0) {
+      const relaxed = candidates.filter(m => !excluded.has(m.id));
+      if (relaxed.length === 0) return null;
+      return relaxed.sort((a, b) =>
+        (recentMap.get(a.id)?.size ?? 0) - (recentMap.get(b.id)?.size ?? 0)
+      )[0];
     }
 
-    // Excluir presidente y miembros ya usados
-    const excluded = new Set([...usedMemberIds]);
-    if (presidentId) excluded.add(presidentId);
+    return available.sort((a, b) =>
+      (recentMap.get(a.id)?.size ?? 0) - (recentMap.get(b.id)?.size ?? 0)
+    )[0];
+  }
 
-    let selected = selectMember(candidates, type.id, recentMap, excluded);
-    if (!selected) selected = selectMember(candidates, type.id, recentMap, excluded, true);
-    if (!selected) selected = candidates.find(m => !excluded.has(m.id)) ?? candidates[0] ?? null;
+  function assign(memberId, typeId, isHelper = false) {
+    assignments.push({
+      memberId,
+      assignmentTypeId: typeId,
+      weekId,
+      isHelper,
+      customName: customNameMap.get(typeId) ?? null,
+    });
+    if (!isHelper) used.add(memberId);
+  }
 
-    if (!selected) continue;
+  const privilegedH  = members.filter(m => isPrivileged(m) && isH(m));
+  const ancianosH    = members.filter(m => isAnciano(m) && isH(m));
+  const mujeres      = members.filter(m => isM(m));
+  const publicadores = members.filter(m => isPublicador(m));
+  const todosH       = members.filter(m => isH(m));
 
-    usedMemberIds.add(selected.id);
-    assignments.push({ memberId: selected.id, assignmentTypeId: type.id, weekId, isHelper: false });
+  // ── Presidente ────────────────────────────────────────────────────────────
+  const tipoIntro      = weekAssignmentTypes.find(t => t.name === 'Palabras de introducción');
+  const tipoConclusion = weekAssignmentTypes.find(t => t.name === 'Palabras de conclusión');
+  let presidenteId = null;
+  if (tipoIntro) {
+    const presidente = pick(privilegedH, tipoIntro.id);
+    if (presidente) {
+      presidenteId = presidente.id;
+      used.add(presidenteId);
+      assign(presidenteId, tipoIntro.id);
+    }
+  }
+  if (tipoConclusion && presidenteId) {
+    assign(presidenteId, tipoConclusion.id);
+  }
 
-    // --- Ayudante ---
+  // ── Oración apertura ──────────────────────────────────────────────────────
+  const tipoOrApertura = weekAssignmentTypes.find(t => t.name === 'Canción y oración de apertura');
+  if (tipoOrApertura) {
+    const orador = pick(privilegedH, tipoOrApertura.id);
+    if (orador) assign(orador.id, tipoOrApertura.id);
+  }
+
+  // ── Oración cierre ────────────────────────────────────────────────────────
+  const tipoOrCierre = weekAssignmentTypes.find(t => t.name === 'Oración de cierre');
+  if (tipoOrCierre) {
+    const orador = pick(privilegedH, tipoOrCierre.id);
+    if (orador) assign(orador.id, tipoOrCierre.id);
+  }
+
+  // ── Tesoros pt 1 — Discurso (título variable) ─────────────────────────────
+  const tipoTesoros1 = weekAssignmentTypes.find(t =>
+    t.name === 'Discurso de Tesoros de la Biblia'
+  );
+  if (tipoTesoros1) {
+    const orador = pick(privilegedH, tipoTesoros1.id);
+    if (orador) assign(orador.id, tipoTesoros1.id);
+  }
+
+  // ── Tesoros pt 2 — Busquemos perlas ──────────────────────────────────────
+  const tipoPerlas = weekAssignmentTypes.find(t => t.name === 'Busquemos perlas escondidas');
+  if (tipoPerlas) {
+    const orador = pick(privilegedH, tipoPerlas.id);
+    if (orador) assign(orador.id, tipoPerlas.id);
+  }
+
+  // ── Tesoros pt 3 — Lectura de la Biblia ──────────────────────────────────
+  const tipoLectura = weekAssignmentTypes.find(t => t.name === 'Lectura de la Biblia');
+  if (tipoLectura) {
+    const candidatos = members.filter(m => isPublicador(m) && isH(m));
+    const lector = pick(candidatos.length > 0 ? candidatos : todosH, tipoLectura.id);
+    if (lector) assign(lector.id, tipoLectura.id);
+  }
+
+  // ── Seamos Mejores Maestros ───────────────────────────────────────────────
+const smmTypes = weekAssignmentTypes.filter(t => t.section === 'Seamos Mejores Maestros');
+for (const type of smmTypes) {
+  const isDiscurso = /^discurso/i.test(type.name);
+
+  if (isDiscurso) {
+    const prioridad = publicadores.filter(m => !used.has(m.id));
+    const candidatos = prioridad.length > 0 ? prioridad : members;
+    const orador = pick(candidatos, type.id);
+    if (orador) assign(orador.id, type.id);
+  } else {
+    const principal = pick(mujeres, type.id);
+    if (principal) assign(principal.id, type.id);
     if (type.requiresHelper) {
-      const helperCandidates = members.filter(m => {
-        if (type.gender === 'H') return m.gender === 'H';
-        if (type.gender === 'M') return m.gender === 'M';
-        return true;
-      });
-
-      const helperExcluded = new Set([selected.id, ...usedMemberIds]);
-      let helper = selectMember(helperCandidates, type.id, recentMap, helperExcluded);
-      if (!helper) helper = selectMember(helperCandidates, type.id, recentMap, helperExcluded, true);
-      if (!helper) helper = helperCandidates.find(m => !helperExcluded.has(m.id)) ?? null;
-
-      if (helper) {
-        assignments.push({ memberId: helper.id, assignmentTypeId: type.id, weekId, isHelper: true });
+      const ayudante = pick(mujeres, type.id, new Set([principal?.id ?? 0]));
+      if (ayudante) {
+        assign(ayudante.id, type.id, true);
+        used.add(ayudante.id);
       }
     }
   }
+}
 
+  // ── Nuestra Vida Cristiana (sin estudio bíblico) ──────────────────────────
+  const nvcTypes = weekAssignmentTypes.filter(t =>
+    t.section === 'Nuestra Vida Cristiana' &&
+    t.name !== 'Estudio bíblico de la congregación'
+  );
+  for (const type of nvcTypes) {
+    const orador = pick(ancianosH, type.id);
+    if (orador) assign(orador.id, type.id);
+  }
+
+  // ── Estudio bíblico ───────────────────────────────────────────────────────
+  const tipoEstudio = weekAssignmentTypes.find(t => t.name === 'Estudio bíblico de la congregación');
+  if (tipoEstudio) {
+    const conductor = pick(privilegedH, tipoEstudio.id);
+    if (conductor) {
+      assign(conductor.id, tipoEstudio.id);
+      const lector = pick(todosH, tipoEstudio.id, new Set([conductor.id]));
+      if (lector) assign(lector.id, tipoEstudio.id, true);
+    }
+  }
+
+  // ── Guardar ───────────────────────────────────────────────────────────────
   await prisma.assignmentDone.createMany({ data: assignments });
 
   return prisma.week.findUnique({
     where: { id: weekId },
     include: {
+      weekTypes: {
+        include: { assignmentType: true },
+        orderBy: { assignmentType: { order: 'asc' } },
+      },
       assignments: {
         include: { member: true, assignmentType: true },
         orderBy: { assignmentType: { order: 'asc' } },
       },
     },
   });
-}
-
-function selectMember(candidates, assignmentTypeId, recentMap, excludedIds, ignoreRecent = false) {
-  const available = candidates.filter(m => {
-    if (excludedIds.has(m.id)) return false;
-    if (ignoreRecent) return true;
-    const recent = recentMap.get(m.id);
-    return !recent || !recent.has(assignmentTypeId);
-  });
-
-  if (available.length === 0) return null;
-
-  available.sort((a, b) => {
-    const aCount = recentMap.get(a.id)?.size ?? 0;
-    const bCount = recentMap.get(b.id)?.size ?? 0;
-    return aCount - bCount;
-  });
-
-  return available[0];
 }

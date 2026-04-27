@@ -9,7 +9,7 @@ datasource db {
 
 model Role {
   id       Int      @id @default(autoincrement())
-  name     String   @unique  // "Anciano", "Ministerial", "Publicador", "Pionero"
+  name     String   @unique
   canLead  Boolean  @default(false)
   members  Member[]
 }
@@ -33,20 +33,22 @@ model Member {
   createdAt   DateTime         @default(now())
 }
 
-model AssignmentType {
-  id             Int              @id @default(autoincrement())
-  name           String           @unique  // "Oración inicial", "Discurso", etc.
-  gender         String           // "H", "M", "AMBOS"
-  section        String           // "Vida Cristiana", "Ministerio Cristiano", etc.
-  order          Int              // Para exportar en orden correcto
-  requiresHelper Boolean          @default(false)  // Si necesita ayudante
-  assignments    AssignmentDone[]
+model Week {
+  id              Int                  @id @default(autoincrement())
+  startDate       DateTime             @unique
+  assignments     AssignmentDone[]
+  weekTypes       WeekAssignmentType[]
 }
 
-model Week {
-  id          Int              @id @default(autoincrement())
-  startDate   DateTime         @unique
-  assignments AssignmentDone[]
+model AssignmentType {
+  id             Int                  @id @default(autoincrement())
+  name           String               @unique
+  gender         String
+  section        String
+  order          Int
+  requiresHelper Boolean              @default(false)
+  assignments    AssignmentDone[]
+  weekTypes      WeekAssignmentType[]
 }
 
 model AssignmentDone {
@@ -54,10 +56,22 @@ model AssignmentDone {
   memberId         Int
   assignmentTypeId Int
   weekId           Int
-  isHelper         Boolean        @default(false)  // false = principal, true = ayudante
+  isHelper         Boolean        @default(false)
+  customName       String?
   member           Member         @relation(fields: [memberId], references: [id])
   assignmentType   AssignmentType @relation(fields: [assignmentTypeId], references: [id])
   week             Week           @relation(fields: [weekId], references: [id])
 
   @@unique([memberId, assignmentTypeId, weekId, isHelper])
+}
+
+model WeekAssignmentType {
+  id               Int            @id @default(autoincrement())
+  weekId           Int
+  assignmentTypeId Int
+  customName       String?
+  week             Week           @relation(fields: [weekId], references: [id])
+  assignmentType   AssignmentType @relation(fields: [assignmentTypeId], references: [id])
+
+  @@unique([weekId, assignmentTypeId])
 }
