@@ -5,7 +5,7 @@ const api = axios.create({
 });
 
 // Miembros
-export const getMembers = () => api.get('/members');
+export const getMembers = (data) => api.get('/members', data);
 export const createMember = (data) => api.post('/members', data);
 export const updateMember = (id, data) => api.put(`/members/${id}`, data);
 export const deleteMember = (id) => api.delete(`/members/${id}`);
@@ -22,6 +22,10 @@ export const getWeekById = (id) => api.get(`/weeks/${id}`);
 export const importWeek = (docId) => api.post('/weeks/import', { docId });
 export const generateAssignments = (id) => api.post(`/weeks/${id}/generate`);
 export const deleteWeek = (id) => api.delete(`/weeks/${id}`);
+export const updateAssignmentMember = (assignmentId, memberId) =>
+  api.patch(`/weeks/assignments/${assignmentId}/member`, { memberId });
+export const updateAssignmentType = (assignmentId, assignmentTypeId, customName) =>
+  api.patch(`/weeks/assignments/${assignmentId}/type`, { assignmentTypeId, customName });
 
 // Tipos de asignación
 export const getAssignmentTypes = () => api.get('/assignment-types');

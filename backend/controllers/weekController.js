@@ -93,27 +93,47 @@ export async function getWeekById(req, res) {
   }
 }
 
-export async function updateAssignment(req, res) {
+// Cambiar miembro de una asignación
+export async function updateAssignmentMember(req, res) {
   try {
-    const { memberId, assignmentTypeId, isHelper } = req.body;
-    const weekId = Number(req.params.id);
+    const { assignmentId } = req.params;
+    const { memberId } = req.body;
 
-    if (!memberId || !assignmentTypeId)
-      return res.status(400).json({ error: 'memberId y assignmentTypeId son requeridos' });
+    if (!memberId) return res.status(400).json({ error: 'memberId es requerido' });
 
-    const assignment = await prisma.assignmentDone.upsert({
-      where: {
-        memberId_assignmentTypeId_weekId_isHelper: {
-          memberId, assignmentTypeId, weekId, isHelper: isHelper ?? false,
-        },
-      },
-      update: { memberId },
-      create: { memberId, assignmentTypeId, weekId, isHelper: isHelper ?? false },
+    const assignment = await prisma.assignmentDone.update({
+      where: { id: Number(assignmentId) },
+      data: { memberId: Number(memberId) },
       include: { member: true, assignmentType: true },
     });
 
     res.json(assignment);
   } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Asignación no encontrada' });
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Cambiar tipo de asignación (reemplazar parte)
+export async function updateAssignmentType(req, res) {
+  try {
+    const { assignmentId } = req.params;
+    const { assignmentTypeId, customName } = req.body;
+
+    if (!assignmentTypeId) return res.status(400).json({ error: 'assignmentTypeId es requerido' });
+
+    const assignment = await prisma.assignmentDone.update({
+      where: { id: Number(assignmentId) },
+      data: {
+        assignmentTypeId: Number(assignmentTypeId),
+        customName: customName ?? null,
+      },
+      include: { member: true, assignmentType: true },
+    });
+
+    res.json(assignment);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Asignación no encontrada' });
     res.status(500).json({ error: err.message });
   }
 }

@@ -1,12 +1,12 @@
 import express from 'express';
-import { generateWeekAssignments } from '../controllers/weekController.js';
-
 import {
   importWeek,
   getWeeks,
   getWeekById,
-  updateAssignment,
+  generateWeekAssignments,
   deleteWeek,
+  updateAssignmentMember,
+  updateAssignmentType,
 } from '../controllers/weekController.js';
 
 const router = express.Router();
@@ -14,8 +14,9 @@ const router = express.Router();
 router.get('/', getWeeks);
 router.get('/:id', getWeekById);
 router.post('/import', importWeek);
-router.put('/:id/assignments', updateAssignment);
-router.delete('/:id', deleteWeek);
 router.post('/:id/generate', generateWeekAssignments);
+router.delete('/:id', deleteWeek);
+router.patch('/assignments/:assignmentId/member', updateAssignmentMember);
+router.patch('/assignments/:assignmentId/type', updateAssignmentType);
 
 export default router;

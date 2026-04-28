@@ -99,6 +99,8 @@ export async function generateAssignments(weekId) {
   // ── Presidente ────────────────────────────────────────────────────────────
   const tipoIntro      = weekAssignmentTypes.find(t => t.name === 'Palabras de introducción');
   const tipoConclusion = weekAssignmentTypes.find(t => t.name === 'Palabras de conclusión');
+  const tipoPresidente = await prisma.assignmentType.findFirst({ where: { name: 'Presidente' } });
+
   let presidenteId = null;
   if (tipoIntro) {
     const presidente = pick(privilegedH, tipoIntro.id);
@@ -106,12 +108,22 @@ export async function generateAssignments(weekId) {
       presidenteId = presidente.id;
       used.add(presidenteId);
       assign(presidenteId, tipoIntro.id);
+
+      // Guardar también como "Presidente"
+      if (tipoPresidente) {
+        assignments.push({
+          memberId: presidenteId,
+          assignmentTypeId: tipoPresidente.id,
+          weekId,
+          isHelper: false,
+          customName: null,
+        });
+      }
     }
   }
   if (tipoConclusion && presidenteId) {
     assign(presidenteId, tipoConclusion.id);
   }
-
   // ── Oración apertura ──────────────────────────────────────────────────────
   const tipoOrApertura = weekAssignmentTypes.find(t => t.name === 'Canción y oración de apertura');
   if (tipoOrApertura) {
