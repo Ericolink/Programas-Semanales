@@ -9,9 +9,20 @@ const isPrivileged  = m => isAnciano(m) || isMinisterial(m);
 const isH           = m => m.gender === 'H';
 const isM           = m => m.gender === 'M';
 
-export async function generateAssignments(weekId) {
-  const week = await prisma.week.findUnique({ where: { id: weekId } });
+export async function generateAssignments(weekId, congregationId) {
+
+  // Obtener semana (FIX agregado)
+  const week = await prisma.week.findUnique({
+    where: { id: weekId },
+  });
+
   if (!week) throw new Error('Semana no encontrada');
+
+  // Filtra miembros por congregación
+  const members = await prisma.member.findMany({
+    where: { active: true, congregationId },
+    include: { role: true },
+  });
 
   const assignmentTypes = await prisma.assignmentType.findMany({
     orderBy: { order: 'asc' },
@@ -21,6 +32,7 @@ export async function generateAssignments(weekId) {
   const weekTypes = await prisma.weekAssignmentType.findMany({
     where: { weekId },
   });
+
   const customNameMap = new Map(
     weekTypes.map(wt => [wt.assignmentTypeId, wt.customName])
   );
@@ -28,11 +40,6 @@ export async function generateAssignments(weekId) {
   // Solo usar los tipos que pertenecen a esta semana
   const weekTypeIds = new Set(weekTypes.map(wt => wt.assignmentTypeId));
   const weekAssignmentTypes = assignmentTypes.filter(t => weekTypeIds.has(t.id));
-
-  const members = await prisma.member.findMany({
-    where: { active: true },
-    include: { role: true },
-  });
 
   const recentWeeks = await prisma.week.findMany({
     where: { startDate: { lt: week.startDate } },
@@ -109,7 +116,6 @@ export async function generateAssignments(weekId) {
       used.add(presidenteId);
       assign(presidenteId, tipoIntro.id);
 
-      // Guardar también como "Presidente"
       if (tipoPresidente) {
         assignments.push({
           memberId: presidenteId,
@@ -121,9 +127,11 @@ export async function generateAssignments(weekId) {
       }
     }
   }
+
   if (tipoConclusion && presidenteId) {
     assign(presidenteId, tipoConclusion.id);
   }
+
   // ── Oración apertura ──────────────────────────────────────────────────────
   const tipoOrApertura = weekAssignmentTypes.find(t => t.name === 'Canción y oración de apertura');
   if (tipoOrApertura) {
@@ -138,7 +146,7 @@ export async function generateAssignments(weekId) {
     if (orador) assign(orador.id, tipoOrCierre.id);
   }
 
-  // ── Tesoros pt 1 — Discurso (título variable) ─────────────────────────────
+  // ── Tesoros pt 1 ──────────────────────────────────────────────────────────
   const tipoTesoros1 = weekAssignmentTypes.find(t =>
     t.name === 'Discurso de Tesoros de la Biblia'
   );
@@ -147,14 +155,14 @@ export async function generateAssignments(weekId) {
     if (orador) assign(orador.id, tipoTesoros1.id);
   }
 
-  // ── Tesoros pt 2 — Busquemos perlas ──────────────────────────────────────
+  // ── Tesoros pt 2 ──────────────────────────────────────────────────────────
   const tipoPerlas = weekAssignmentTypes.find(t => t.name === 'Busquemos perlas escondidas');
   if (tipoPerlas) {
     const orador = pick(privilegedH, tipoPerlas.id);
     if (orador) assign(orador.id, tipoPerlas.id);
   }
 
-  // ── Tesoros pt 3 — Lectura de la Biblia ──────────────────────────────────
+  // ── Lectura ───────────────────────────────────────────────────────────────
   const tipoLectura = weekAssignmentTypes.find(t => t.name === 'Lectura de la Biblia');
   if (tipoLectura) {
     const candidatos = members.filter(m => isPublicador(m) && isH(m));
@@ -163,33 +171,36 @@ export async function generateAssignments(weekId) {
   }
 
   // ── Seamos Mejores Maestros ───────────────────────────────────────────────
-const smmTypes = weekAssignmentTypes.filter(t => t.section === 'Seamos Mejores Maestros');
-for (const type of smmTypes) {
-  const isDiscurso = /^discurso/i.test(type.name);
+  const smmTypes = weekAssignmentTypes.filter(t => t.section === 'Seamos Mejores Maestros');
 
-  if (isDiscurso) {
-    const prioridad = publicadores.filter(m => !used.has(m.id));
-    const candidatos = prioridad.length > 0 ? prioridad : members;
-    const orador = pick(candidatos, type.id);
-    if (orador) assign(orador.id, type.id);
-  } else {
-    const principal = pick(mujeres, type.id);
-    if (principal) assign(principal.id, type.id);
-    if (type.requiresHelper) {
-      const ayudante = pick(mujeres, type.id, new Set([principal?.id ?? 0]));
-      if (ayudante) {
-        assign(ayudante.id, type.id, true);
-        used.add(ayudante.id);
+  for (const type of smmTypes) {
+    const isDiscurso = /^discurso/i.test(type.name);
+
+    if (isDiscurso) {
+      const prioridad = publicadores.filter(m => !used.has(m.id));
+      const candidatos = prioridad.length > 0 ? prioridad : members;
+      const orador = pick(candidatos, type.id);
+      if (orador) assign(orador.id, type.id);
+    } else {
+      const principal = pick(mujeres, type.id);
+      if (principal) assign(principal.id, type.id);
+
+      if (type.requiresHelper) {
+        const ayudante = pick(mujeres, type.id, new Set([principal?.id ?? 0]));
+        if (ayudante) {
+          assign(ayudante.id, type.id, true);
+          used.add(ayudante.id);
+        }
       }
     }
   }
-}
 
-  // ── Nuestra Vida Cristiana (sin estudio bíblico) ──────────────────────────
+  // ── Nuestra Vida Cristiana ────────────────────────────────────────────────
   const nvcTypes = weekAssignmentTypes.filter(t =>
     t.section === 'Nuestra Vida Cristiana' &&
     t.name !== 'Estudio bíblico de la congregación'
   );
+
   for (const type of nvcTypes) {
     const orador = pick(ancianosH, type.id);
     if (orador) assign(orador.id, type.id);
@@ -197,6 +208,7 @@ for (const type of smmTypes) {
 
   // ── Estudio bíblico ───────────────────────────────────────────────────────
   const tipoEstudio = weekAssignmentTypes.find(t => t.name === 'Estudio bíblico de la congregación');
+
   if (tipoEstudio) {
     const conductor = pick(privilegedH, tipoEstudio.id);
     if (conductor) {

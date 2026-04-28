@@ -7,6 +7,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Auth ──────────────────────────────────────────────────────────────────
+model Congregation {
+  id        Int       @id @default(autoincrement())
+  name      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  users     User[]
+  groups    Group[]
+  members   Member[]
+  weeks     Week[]
+  assignmentTypes AssignmentType[]
+}
+
+model User {
+  id              Int          @id @default(autoincrement())
+  email           String       @unique
+  password        String
+  name            String
+  role            String       @default("ADMIN") // "SUPERADMIN" | "ADMIN"
+  active          Boolean      @default(true)
+  congregationId  Int?
+  congregation    Congregation? @relation(fields: [congregationId], references: [id])
+  feedback        Feedback[]
+  createdAt       DateTime     @default(now())
+}
+
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // "bug" | "sugerencia" | "otro"
+  message   String
+  createdAt DateTime @default(now())
+}
+
+// ── Congregación ──────────────────────────────────────────────────────────
 model Role {
   id       Int      @id @default(autoincrement())
   name     String   @unique
@@ -15,40 +51,63 @@ model Role {
 }
 
 model Group {
-  id      Int      @id @default(autoincrement())
-  name    String
-  members Member[]
+  id             Int          @id @default(autoincrement())
+  name           String
+  congregationId Int
+  congregation   Congregation @relation(fields: [congregationId], references: [id])
+  members        Member[]
 }
 
 model Member {
-  id          Int              @id @default(autoincrement())
-  name        String
-  gender      String
-  active      Boolean          @default(true)
-  groupId     Int?
-  group       Group?           @relation(fields: [groupId], references: [id])
-  roleId      Int?
-  role        Role?            @relation(fields: [roleId], references: [id])
-  assignments AssignmentDone[]
-  createdAt   DateTime         @default(now())
-}
-
-model Week {
-  id              Int                  @id @default(autoincrement())
-  startDate       DateTime             @unique
-  assignments     AssignmentDone[]
-  weekTypes       WeekAssignmentType[]
+  id             Int              @id @default(autoincrement())
+  name           String
+  gender         String
+  active         Boolean          @default(true)
+  groupId        Int?
+  group          Group?           @relation(fields: [groupId], references: [id])
+  roleId         Int?
+  role           Role?            @relation(fields: [roleId], references: [id])
+  congregationId Int
+  congregation   Congregation     @relation(fields: [congregationId], references: [id])
+  assignments    AssignmentDone[]
+  createdAt      DateTime         @default(now())
 }
 
 model AssignmentType {
   id             Int                  @id @default(autoincrement())
-  name           String               @unique
+  name           String
   gender         String
   section        String
   order          Int
   requiresHelper Boolean              @default(false)
+  congregationId Int
+  congregation   Congregation         @relation(fields: [congregationId], references: [id])
   assignments    AssignmentDone[]
   weekTypes      WeekAssignmentType[]
+
+  @@unique([name, congregationId])
+}
+
+model Week {
+  id             Int                  @id @default(autoincrement())
+  startDate      DateTime
+  congregationId Int
+  congregation   Congregation         @relation(fields: [congregationId], references: [id])
+  assignments    AssignmentDone[]
+  weekTypes      WeekAssignmentType[]
+
+  @@unique([startDate, congregationId])
+}
+
+model WeekAssignmentType {
+  id               Int            @id @default(autoincrement())
+  weekId           Int
+  assignmentTypeId Int
+  customName       String?
+  week             Week           @relation(fields: [weekId], references: [id])
+  assignmentType   AssignmentType @relation(fields: [assignmentTypeId], references: [id])
+
+  @@unique([weekId, assignmentTypeId])
 }
 
 model AssignmentDone {
@@ -63,15 +122,4 @@ model AssignmentDone {
   week             Week           @relation(fields: [weekId], references: [id])
 
   @@unique([memberId, assignmentTypeId, weekId, isHelper])
-}
-
-model WeekAssignmentType {
-  id               Int            @id @default(autoincrement())
-  weekId           Int
-  assignmentTypeId Int
-  customName       String?
-  week             Week           @relation(fields: [weekId], references: [id])
-  assignmentType   AssignmentType @relation(fields: [assignmentTypeId], references: [id])
-
-  @@unique([weekId, assignmentTypeId])
 }
