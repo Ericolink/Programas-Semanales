@@ -1,16 +1,19 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.js';
 
-const NAV = [
-  { to: '/',         label: 'Dashboard',  icon: '⬡' },
-  { to: '/semanas',  label: 'Semanas',    icon: '📅' },
-  { to: '/miembros', label: 'Miembros',   icon: '👥' },
-  { to: '/grupos',   label: 'Grupos',     icon: '🏷️' },
-];
-
 export default function Layout() {
   const { user, logoutUser } = useAuth();
   const navigate = useNavigate();
+
+const NAV = [
+  { to: '/',          label: 'Dashboard',  icon: '⬡' },
+  { to: '/semanas',   label: 'Semanas',    icon: '📅' },
+  { to: '/miembros',  label: 'Miembros',   icon: '👥' },
+  { to: '/grupos',    label: 'Grupos',     icon: '🏷️' },
+  { to: '/feedback',  label: 'Feedback',   icon: '💬' },
+  ...(user?.role === 'SUPERADMIN' ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
+];
+
 
   const handleLogout = () => {
     logoutUser();

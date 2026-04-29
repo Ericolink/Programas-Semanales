@@ -59,10 +59,15 @@ export async function me(req, res) {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       include: { congregation: true },
-      omit: { password: true },
     });
 
-    res.json(user);
+    if (!user)
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    // Quitar password manualmente
+    const { password, ...userWithoutPassword } = user;
+
+    res.json(userWithoutPassword);
 
   } catch (err) {
     res.status(500).json({ error: err.message });

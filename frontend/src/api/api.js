@@ -62,3 +62,7 @@ export const sendFeedback = (type, message) => api.post('/feedback', { type, mes
 export const getCongregations     = () => api.get('/congregations');
 export const createCongregation   = (data) => api.post('/congregations', data);
 export const toggleCongregation   = (id) => api.patch(`/congregations/${id}/toggle`);
+
+export const changePassword = (userId, newPassword) =>
+  api.patch('/congregations/change-password', { userId, newPassword });
+export const getFeedback = () => api.get('/feedback');

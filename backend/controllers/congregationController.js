@@ -4,7 +4,10 @@ import { prisma } from '../prismaClient.js';
 export async function getCongregations(req, res) {
   try {
     const congregations = await prisma.congregation.findMany({
-      include: { _count: { select: { members: true, users: true } } },
+      include: {
+        _count: { select: { members: true, users: true } },
+        users: { select: { id: true, name: true, email: true, role: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
     res.json(congregations);
@@ -63,6 +66,26 @@ export async function toggleCongregation(req, res) {
     });
     res.json(updated);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function changePassword(req, res) {
+  try {
+    const { userId, newPassword } = req.body;
+    if (!userId || !newPassword)
+      return res.status(400).json({ error: 'userId y newPassword son requeridos' });
+    if (newPassword.length < 6)
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: Number(userId) },
+      data: { password: hashed },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Usuario no encontrado' });
     res.status(500).json({ error: err.message });
   }
 }
