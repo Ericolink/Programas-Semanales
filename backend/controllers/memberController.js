@@ -99,3 +99,26 @@ export async function deleteMember(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
+
+export async function getMemberHistory(req, res) {
+  try {
+    const member = await prisma.member.findFirst({
+      where: { id: Number(req.params.id), congregationId: req.user.congregationId },
+      include: { role: true, group: true },
+    });
+    if (!member) return res.status(404).json({ error: 'Miembro no encontrado' });
+
+    const assignments = await prisma.assignmentDone.findMany({
+      where: { memberId: Number(req.params.id) },
+      include: {
+        assignmentType: true,
+        week: true,
+      },
+      orderBy: { week: { startDate: 'desc' } },
+    });
+
+    res.json({ member, assignments });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}

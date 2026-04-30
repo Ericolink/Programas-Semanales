@@ -66,3 +66,5 @@ export const toggleCongregation   = (id) => api.patch(`/congregations/${id}/togg
 export const changePassword = (userId, newPassword) =>
   api.patch('/congregations/change-password', { userId, newPassword });
 export const getFeedback = () => api.get('/feedback');
+
+export const getMemberHistory = (id) => api.get(`/members/${id}/history`);

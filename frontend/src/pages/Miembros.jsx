@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getMembers, getGroups, createMember, updateMember, deleteMember } from '../api/api.js';
+import { useNavigate } from 'react-router-dom';
+
+
 
 const ROLES = [
   { id: 1, name: 'Anciano' },
@@ -29,6 +32,7 @@ function roleColor(name) {
 }
 
 export default function Miembros() {
+  const navigate = useNavigate();
   const [members, setMembers] = useState([]);
   const [groups, setGroups]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -270,6 +274,17 @@ export default function Miembros() {
                   }}
                 >
                   ✕
+                </button>
+
+                <button
+                  onClick={() => navigate(`/miembros/${m.id}/historial`)}
+                  style={{
+                    background: 'transparent', border: '1px solid var(--border)',
+                    borderRadius: 6, padding: '5px 10px', color: 'var(--text-2)',
+                    fontSize: 12, cursor: 'pointer',
+                  }}
+                >
+                  Historial
                 </button>
               </div>
             </div>

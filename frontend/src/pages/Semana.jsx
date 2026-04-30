@@ -5,6 +5,7 @@ import {
   updateAssignmentMember, updateAssignmentType, getAssignmentTypes
 } from '../api/api.js';
 import html2canvas from 'html2canvas';
+import { useAuth } from '../hooks/useAuth.js';
 
 const SECTION_STYLES = {
   'Apertura':                { color: '#6b7280', bg: '#f3f4f6', label: 'APERTURA' },
@@ -32,25 +33,43 @@ function groupBySection(assignments) {
   return grouped;
 }
 
-function getDisplayName(assignment) {
-  return assignment.customName || assignment.assignmentType.name;
+function getDisplayName(assignment, allAssignments) {
+  const name = assignment.customName || assignment.assignmentType.name;
+  const section = assignment.assignmentType.section;
+
+  const noNumber = ['Apertura', 'Cierre'];
+  if (noNumber.includes(section)) return name;
+  if (assignment.assignmentType.name === 'Presidente') return name;
+
+  const cleanName = name.replace(/\s+\d+$/, '');
+
+  const numbered = allAssignments
+    .filter(a =>
+      !a.isHelper &&
+      !noNumber.includes(a.assignmentType.section) &&
+      a.assignmentType.name !== 'Presidente'
+    )
+    .sort((a, b) => a.assignmentType.order - b.assignmentType.order);
+
+  const index = numbered.findIndex(a => a.assignmentTypeId === assignment.assignmentTypeId);
+  const num = index + 1;
+
+  return `${num}. ${cleanName}`;
 }
 
-// ── Componente del programa imprimible (fondo blanco para exportar) ───────
-function ProgramaImprimible({ week, sections, dateStr, getPairs }) {
-  return (
+function ProgramaImprimible({ week, sections, dateStr, getPairs, allAssignments, congregationName }) {
+    return (
     <div style={{
       background: '#ffffff', width: 600,
       fontFamily: 'Arial, sans-serif', color: '#1a1a1a', padding: 0,
     }}>
-      {/* Encabezado */}
       <div style={{
         background: '#1a3a5c', color: '#ffffff', padding: '16px 24px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <div>
           <div style={{ fontSize: 11, letterSpacing: '0.1em', opacity: 0.8, marginBottom: 2 }}>
-            CONGREGACIÓN FELIPE ÁNGELES
+            {congregationName.toUpperCase()}
           </div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>
             Programa para la reunión de entre semana
@@ -61,7 +80,6 @@ function ProgramaImprimible({ week, sections, dateStr, getPairs }) {
         </div>
       </div>
 
-      {/* Secciones */}
       {SECTION_ORDER.map(sectionName => {
         const items = sections[sectionName];
         if (!items || items.length === 0) return null;
@@ -86,7 +104,7 @@ function ProgramaImprimible({ week, sections, dateStr, getPairs }) {
               }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, lineHeight: 1.4, color: '#1a1a1a' }}>
-                    {getDisplayName(principal)}
+                    {getDisplayName(principal, allAssignments)}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0, maxWidth: 220 }}>
@@ -105,7 +123,6 @@ function ProgramaImprimible({ week, sections, dateStr, getPairs }) {
         );
       })}
 
-      {/* Footer */}
       <div style={{
         background: '#1a3a5c', color: 'rgba(255,255,255,0.6)',
         padding: '8px 24px', fontSize: 10, textAlign: 'center',
@@ -116,11 +133,13 @@ function ProgramaImprimible({ week, sections, dateStr, getPairs }) {
   );
 }
 
-// ── Página principal ──────────────────────────────────────────────────────
 export default function Semana() {
   const { id } = useParams();
   const navigate = useNavigate();
   const printRef = useRef(null);
+
+  const { user } = useAuth();
+  const congregationName = user?.congregation?.name ?? 'Congregación';
 
   const [week, setWeek]                       = useState(null);
   const [loading, setLoading]                 = useState(true);
@@ -206,12 +225,13 @@ export default function Semana() {
   const inputStyle = {
     width: '100%', background: 'var(--bg)', border: '1px solid var(--border)',
     borderRadius: 8, padding: '10px 14px', color: 'var(--text)', fontSize: 14, outline: 'none',
+    boxSizing: 'border-box',
   };
 
   return (
     <div style={{ maxWidth: 800 }}>
 
-      {/* ── Modal: Cambiar miembro ── */}
+      {/* Modal: Cambiar miembro */}
       {editingMember && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -223,7 +243,10 @@ export default function Semana() {
           }}>
             <h2 style={{ fontSize: 18, marginBottom: 6 }}>Cambiar miembro</h2>
             <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>
-              {getDisplayName(editingMember)}
+              {getDisplayName(editingMember, week.assignments)}
+              {editingMember.isHelper && (
+                <span style={{ color: 'var(--text-2)', marginLeft: 6 }}>(ayudante)</span>
+              )}
             </p>
             <label style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>
               Seleccionar miembro
@@ -258,7 +281,7 @@ export default function Semana() {
         </div>
       )}
 
-      {/* ── Modal: Cambiar tipo de asignación ── */}
+      {/* Modal: Cambiar tipo de asignación */}
       {editingType && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -270,7 +293,7 @@ export default function Semana() {
           }}>
             <h2 style={{ fontSize: 18, marginBottom: 6 }}>Cambiar asignación</h2>
             <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>
-              Actual: {getDisplayName(editingType)}
+              Actual: {getDisplayName(editingType, week.assignments)}
             </p>
             <label style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>
               Nueva asignación
@@ -309,7 +332,7 @@ export default function Semana() {
         </div>
       )}
 
-      {/* ── Header de la página ── */}
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
         <div>
           <button onClick={() => navigate('/semanas')} style={{
@@ -342,7 +365,7 @@ export default function Semana() {
         </div>
       </div>
 
-      {/* ── Vista oscura del programa ── */}
+      {/* Vista oscura del programa */}
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: 40,
@@ -383,26 +406,45 @@ export default function Semana() {
                     display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, alignItems: 'center',
                   }}>
                     <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4 }}>
-                      {getDisplayName(principal)}
+                      {getDisplayName(principal, week.assignments)}
                     </div>
+
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{principal.member.name}</div>
-                      {helper && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 1 }}>/ {helper.member.name}</div>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: 13, fontWeight: 500 }}>{principal.member.name}</span>
+                        <button
+                          onClick={() => {
+                            setEditingMember(principal);
+                            setSelectedMemberId(String(principal.memberId));
+                          }}
+                          title="Cambiar miembro"
+                          style={{
+                            background: 'transparent', border: '1px solid var(--border)',
+                            borderRadius: 5, padding: '2px 6px', color: 'var(--text-2)',
+                            fontSize: 11, cursor: 'pointer',
+                          }}
+                        >👤</button>
+                      </div>
+                      {helper && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-2)' }}>/ {helper.member.name}</span>
+                          <button
+                            onClick={() => {
+                              setEditingMember(helper);
+                              setSelectedMemberId(String(helper.memberId));
+                            }}
+                            title="Cambiar ayudante"
+                            style={{
+                              background: 'transparent', border: '1px solid var(--border)',
+                              borderRadius: 5, padding: '2px 6px', color: 'var(--text-2)',
+                              fontSize: 11, cursor: 'pointer',
+                            }}
+                          >👤</button>
+                        </div>
+                      )}
                     </div>
-                    {/* Botones de edición */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <button
-                        onClick={() => {
-                          setEditingMember(principal);
-                          setSelectedMemberId(String(principal.memberId));
-                        }}
-                        title="Cambiar miembro"
-                        style={{
-                          background: 'transparent', border: '1px solid var(--border)',
-                          borderRadius: 5, padding: '3px 7px', color: 'var(--text-2)',
-                          fontSize: 11, cursor: 'pointer',
-                        }}
-                      >👤</button>
+
+                    <div>
                       <button
                         onClick={() => {
                           setEditingType(principal);
@@ -425,7 +467,7 @@ export default function Semana() {
         )}
       </div>
 
-      {/* ── Versión blanca para exportar (oculta) ── */}
+      {/* Versión blanca para exportar (oculta) */}
       <div style={{ position: 'absolute', left: -9999, top: 0, zIndex: -1 }}>
         <div ref={printRef}>
           <ProgramaImprimible
@@ -433,6 +475,8 @@ export default function Semana() {
             sections={sections}
             dateStr={dateStr}
             getPairs={getPairs}
+            allAssignments={week.assignments}
+            congregationName={congregationName}
           />
         </div>
       </div>
