@@ -8,7 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────
 model Congregation {
   id        Int       @id @default(autoincrement())
   name      String
@@ -43,7 +42,6 @@ model Feedback {
   createdAt DateTime @default(now())
 }
 
-// ── Congregación ──────────────────────────────────────────────────────────
 model Role {
   id       Int      @id @default(autoincrement())
   name     String   @unique
