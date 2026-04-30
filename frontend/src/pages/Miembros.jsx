@@ -6,9 +6,8 @@ import { useNavigate } from 'react-router-dom';
 
 const ROLES = [
   { id: 1, name: 'Anciano' },
-  { id: 2, name: 'Pionero' },
-  { id: 3, name: 'Publicador' },
-  { id: 4, name: 'Ministerial' },
+  { id: 2, name: 'Publicador' },
+  { id: 3, name: 'Ministerial' },
 ];
 
 const EMPTY_FORM = { name: '', gender: 'H', roleId: '', groupId: '' };
