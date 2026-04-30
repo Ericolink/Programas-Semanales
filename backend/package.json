@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "npx prisma generate",
+    "postinstall": "prisma generate",
+    "build": "prisma generate",
     "start": "node index.js",
-    "dev": "nodemon index.js",
-    "seed": "node prisma/seed.js"
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
