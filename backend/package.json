@@ -4,11 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "postinstall": "prisma generate",
-    "build": "prisma generate",
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
+  "postinstall": "npx --yes prisma@5.10.0 generate",
+  "start": "node index.js",
+  "dev": "nodemon index.js"
+} ,
   "keywords": [],
   "author": "",
   "license": "ISC",
