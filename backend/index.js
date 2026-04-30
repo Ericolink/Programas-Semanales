@@ -12,13 +12,17 @@ import { requireAuth } from './middleware/auth.js';
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://programas-semanales.vercel.app',
+  process.env.CORS_ORIGIN,
+].filter(Boolean);
+
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://programas-semanales.vercel.app',
-  ],
+  origin: allowedOrigins,
   credentials: true,
 }));
+
 app.use(express.json());
 
 app.get('/', (req, res) => res.send('API funcionando 🚀'));
