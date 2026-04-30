@@ -14,7 +14,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@prisma/client": "^5.14.0",
+    "@prisma/client": "^5.10.0",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
-    "prisma": "^5.14.0"
+    "prisma": "^5.10.0"
   },
   "engines": {
     "node": ">=20.0.0 <21.0.0"
