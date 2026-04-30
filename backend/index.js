@@ -15,7 +15,7 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://vida-ministerio.vercel.app', // lo actualizamos después con la URL real
+    'https://programas-semanales.vercel.app',
   ],
   credentials: true,
 }));
