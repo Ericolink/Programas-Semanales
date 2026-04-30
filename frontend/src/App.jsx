@@ -10,6 +10,7 @@ import Semanas from './pages/Semanas.jsx';
 import Semana from './pages/Semana.jsx';
 import Feedback from './pages/Feedback.jsx';
 import Admin from './pages/Admin.jsx';
+import MemberHistory from './pages/MemberHistory.jsx';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="semanas/:id" element={<Semana />} />
         <Route path="feedback" element={<Feedback />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="miembros/:id/historial" element={<MemberHistory />} />
       </Route>
     </Routes>
   );
